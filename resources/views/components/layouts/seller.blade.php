@@ -1,6 +1,7 @@
 <!doctype html>
 @php($brand = $brand ?? config('zizini-demo-data.brand'))
 @php($authSeller = auth()->user())
+@php($demoSeller = config('zizini-demo-data.sellers.0'))
 <html lang="en">
 <head>
     <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -22,8 +23,8 @@
             <button @click="mobile=!mobile" class="min-h-[52px] rounded-xl bg-white/10 px-5 py-3 text-base font-extrabold lg:hidden">Menu</button>
         </div>
         <div class="mt-5 rounded-xl bg-white/10 p-3 text-sm">
-            <p class="font-bold">{{ $authSeller?->name ?? 'Seller' }}</p>
-            <p class="mt-1 text-white/70">{{ $authSeller?->posting_status ?? 'Posting status' }}</p>
+            <p class="font-bold">{{ $authSeller?->name ?? $demoSeller['name'] ?? 'Seller' }}</p>
+            <p class="mt-1 text-white/70">{{ $authSeller?->posting_status ?? $demoSeller['posting_status'] ?? 'Posting status' }}</p>
         </div>
         <nav :class="mobile ? 'grid' : 'hidden lg:grid'" class="mt-6 gap-5 text-base font-semibold lg:text-sm">
             @foreach([

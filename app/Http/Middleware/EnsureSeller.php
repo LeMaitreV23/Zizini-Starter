@@ -11,6 +11,14 @@ class EnsureSeller
 {
     public function handle(Request $request, Closure $next): Response
     {
+        if ($request->cookie('zizini_demo_role') === 'seller') {
+            return $next($request);
+        }
+
+        if ($request->cookie('zizini_demo_role') === 'admin') {
+            return redirect()->route('admin.dashboard');
+        }
+
         $user = Auth::user();
 
         if (! $user) {

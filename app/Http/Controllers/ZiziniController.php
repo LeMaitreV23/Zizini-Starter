@@ -304,6 +304,10 @@ class ZiziniController extends Controller
 
     public function login()
     {
+        if (! $this->databaseReady() && request()->cookie('zizini_demo_role') === 'seller') {
+            return redirect()->route('seller.dashboard');
+        }
+
         if (Auth::check()) {
             return Auth::user()->isAdmin()
                 ? redirect()->route('admin.dashboard')->with('status', 'You are already logged in as admin.')
@@ -315,6 +319,24 @@ class ZiziniController extends Controller
 
     public function authenticate(Request $request)
     {
+        if (! $this->databaseReady()) {
+            $login = $request->input('login', '');
+            $password = $request->input('password', '');
+            $isAdminRoute = $request->routeIs('admin.login.store');
+            $validSeller = in_array($login, ['hello@wanjikufarm.test', '+254 712 345 678', '0712345678'], true) && $password === 'password';
+            $validAdmin = in_array($login, ['admin@zizini.co.ke', 'admin@zizini'], true) && $password === 'password';
+
+            if ($isAdminRoute && $validAdmin) {
+                return redirect()->route('admin.dashboard')->withCookie(cookie('zizini_demo_role', 'admin', 120));
+            }
+
+            if (! $isAdminRoute && $validSeller) {
+                return redirect()->route('seller.dashboard')->withCookie(cookie('zizini_demo_role', 'seller', 120));
+            }
+
+            return redirect($isAdminRoute ? route('admin.login') : route('login'));
+        }
+
         $credentials = $request->validate([
             'login' => ['required', 'string'],
             'password' => ['required', 'string'],
@@ -341,6 +363,10 @@ class ZiziniController extends Controller
 
     public function logout(Request $request)
     {
+        if (! $this->databaseReady()) {
+            return redirect()->route('home')->withCookie(cookie()->forget('zizini_demo_role'));
+        }
+
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
@@ -350,6 +376,25 @@ class ZiziniController extends Controller
 
     public function sellerDashboard()
     {
+        if (! $this->databaseReady()) {
+            $seller = $this->data()['sellers'][0];
+            $sellerListings = collect($this->data()['listings'])->where('seller_id', $seller['id'])->values();
+
+            return $this->view('seller.dashboard', [
+                'seller' => array_merge(['can_post' => true], $seller),
+                'sellerStats' => [
+                    'active' => $sellerListings->where('status', 'active')->count(),
+                    'unverified' => 0,
+                    'pending' => $sellerListings->where('status', 'pending')->count(),
+                    'sold' => $sellerListings->where('status', 'sold')->count(),
+                    'expired' => $sellerListings->where('status', 'expired')->count(),
+                    'clicks' => $sellerListings->sum('contact_clicks'),
+                ],
+                'recentListings' => $sellerListings->take(5),
+                'recentInquiries' => collect(),
+            ]);
+        }
+
         $sellerModel = Auth::user();
         $seller = $this->sellerArray($sellerModel);
         $sellerListings = $sellerModel->listings()->latest()->get();
@@ -372,6 +417,12 @@ class ZiziniController extends Controller
 
     public function sellerListings()
     {
+        if (! $this->databaseReady()) {
+            return $this->view('seller.listings', [
+                'sellerListings' => collect($this->data()['listings'])->where('seller_id', $this->data()['sellers'][0]['id'])->values(),
+            ]);
+        }
+
         $sellerListings = Auth::user()->listings()->latest()->get()->map(fn ($listing) => $this->listingArray($listing))->values();
 
         return $this->view('seller.listings', compact('sellerListings'));
@@ -379,6 +430,12 @@ class ZiziniController extends Controller
 
     public function sellerCreate(string $step)
     {
+        if (! $this->databaseReady()) {
+            $seller = array_merge(['can_post' => true], $this->data()['sellers'][0]);
+
+            return $this->view('seller.create', compact('step', 'seller'));
+        }
+
         $seller = $this->sellerArray(Auth::user());
 
         return $this->view('seller.create', compact('step', 'seller'));
@@ -462,6 +519,18 @@ class ZiziniController extends Controller
 
     public function sellerSimple(string $page)
     {
+        if (! $this->databaseReady()) {
+            $seller = array_merge(['can_post' => true], $this->data()['sellers'][0]);
+            $sellerListings = collect($this->data()['listings'])->where('seller_id', $seller['id'])->values();
+
+            return $this->view('seller.simple', [
+                'page' => $page,
+                'seller' => $seller,
+                'sellerListings' => $sellerListings,
+                'sellerInquiries' => collect(),
+            ]);
+        }
+
         $sellerModel = Auth::user();
         $sellerListings = $sellerModel->listings()->latest()->get();
 
@@ -553,6 +622,10 @@ class ZiziniController extends Controller
 
     public function adminLogin()
     {
+        if (! $this->databaseReady() && request()->cookie('zizini_demo_role') === 'admin') {
+            return redirect()->route('admin.dashboard');
+        }
+
         if (Auth::check()) {
             return Auth::user()->isAdmin()
                 ? redirect()->route('admin.dashboard')
@@ -1081,6 +1154,13 @@ class ZiziniController extends Controller
     private function databaseReady(): bool
     {
         try {
+            $connection = config('database.default');
+            $driver = config("database.connections.$connection.driver");
+
+            if ($driver && ! in_array($driver, \PDO::getAvailableDrivers(), true)) {
+                return false;
+            }
+
             return Schema::hasTable('livestock_listings') && Schema::hasTable('zizini_users');
         } catch (Throwable) {
             return false;
